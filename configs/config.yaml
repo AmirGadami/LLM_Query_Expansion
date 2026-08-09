@@ -1,0 +1,43 @@
+seed: 42
+
+paths:
+  collection: data/raw/collection.tsv
+  train_queries: data/raw/queries.train.tsv
+  train_qrels: data/raw/qrels.train.tsv
+  processed: data/processed
+
+data:
+
+  sft_size: 30000
+  dpo_size: 20000
+  dev_size: 500
+
+model:
+  name: Qwen/Qwen2.5-1.5B-Instruct
+  device: mps
+  dtype: float16
+
+generation:
+  max_new_tokens: 128     
+  batch_size: 16
+
+
+  eval:
+    do_sample: false
+
+
+  sample:
+    do_sample: true
+    temperature: 0.9
+    top_p: 0.95
+    num_candidates: 4
+
+query2doc:
+  repeat: 5
+
+retrieval:
+  index: msmarco-v1-passage
+  k1: 0.9
+  b: 0.4
+  depth: 1000
+  eval_topics: dl19-passage
