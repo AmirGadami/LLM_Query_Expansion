@@ -1,0 +1,18 @@
+# --- retrieval ---
+pyserini>=1.0.0
+faiss-cpu>=1.8.0
+
+# --- modeling ---
+torch>=2.4.0
+transformers>=4.44.0
+accelerate>=0.33.0
+datasets>=2.20.0
+peft>=0.12.0
+trl>=0.11.0
+
+# --- analysis / utils ---
+numpy
+pandas
+scipy
+tqdm
+pyyaml
