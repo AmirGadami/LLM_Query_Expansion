@@ -5,6 +5,8 @@ paths:
   train_queries: data/raw/queries.train.tsv
   train_qrels: data/raw/qrels.train.tsv
   processed: data/processed
+  runs: experiments/runs
+  results: experiments/results
 
 data:
 
