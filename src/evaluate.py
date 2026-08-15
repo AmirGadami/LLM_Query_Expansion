@@ -1,16 +1,4 @@
-"""Score a TREC run file and record the result.
 
-This is the single scoring path for every configuration. Using one
-function for the baseline, zero-shot, SFT and DPO runs means any
-difference between them is a difference in retrieval, not in how the
-scores were computed.
-
-    python -m src.evaluate --run experiments/runs/00_bm25.dl19.txt \
-        --name bm25_baseline
-
-Appends one record per run to experiments/results/metrics.json. Nothing
-in that file should ever be typed by hand.
-"""
 
 import argparse
 import json
@@ -19,25 +7,12 @@ from pathlib import Path
 
 from src.config import load_config
 
-RESULTS = Path("experiments/results/metrics.json")
 
-# (metric flag, binarize)
-# MAP and Recall pass -l 2 to binarize DL19's graded judgments at
-# relevance >= 2. nDCG@10 uses the 0-3 grades directly, so no -l.
-METRICS = [
-    ("map", True),
-    ("ndcg_cut.10", False),
-    ("recall.1000", True),
-]
+METRICS = [("map", True), ("ndcg_cut.10", False), ("recall.1000", True)]
 
 
 def trec_eval(metric, qrels, run_path, binarize):
-    """Return (aggregate, {qid: score}) for one metric.
 
-    -c scores over all queries in the qrels, so a query missing from the
-    run counts as zero rather than being silently dropped from the mean.
-    -q adds per-query scores, needed later for significance testing.
-    """
     cmd = ["python", "-m", "pyserini.eval.trec_eval", "-c", "-q"]
     if binarize:
         cmd += ["-l", "2"]
@@ -60,24 +35,28 @@ def trec_eval(metric, qrels, run_path, binarize):
 
 def evaluate_run(run_path, name, cfg):
     r = cfg["retrieval"]
-    qrels = r["eval_topics"]
-
-    record = {"name": name, "run": str(run_path), "index": r["index"],
-              "bm25": {"k1": r["k1"], "b": r["b"]}, "depth": r["depth"],
-              "scores": {}, "per_query": {}}
+    scores, per_query = {}, {}
 
     for metric, binarize in METRICS:
-        aggregate, per_query = trec_eval(metric, qrels, run_path, binarize)
         key = metric.replace(".", "_")
-        record["scores"][key] = aggregate
-        record["per_query"][key] = per_query
-        print(f"{key:15s} {aggregate:.4f}")
+        scores[key], per_query[key] = trec_eval(
+            metric, r["eval_topics"], run_path, binarize)
+        print(f"{key:15s} {scores[key]:.4f}")
 
-    record["num_queries"] = len(record["per_query"]["map"])
-    return record
+    return {
+        "name": name,
+        "run": str(run_path),
+        "index": r["index"],
+        "bm25": {"k1": r["k1"], "b": r["b"]},
+        "depth": r["depth"],
+        "num_queries": len(per_query["map"]),
+        "scores": scores,
+        "per_query": per_query,
+    }
 
 
-def append_result(record, path=RESULTS):
+def append_result(record, path):
+    """Add one record, replacing any earlier record with the same name."""
     path.parent.mkdir(parents=True, exist_ok=True)
     results = json.loads(path.read_text()) if path.exists() else []
     results = [r for r in results if r["name"] != record["name"]]
@@ -92,8 +71,9 @@ def main():
     p.add_argument("--name", required=True)
     args = p.parse_args()
 
-    record = evaluate_run(args.run, args.name, load_config())
-    append_result(record)
+    cfg = load_config()
+    record = evaluate_run(args.run, args.name, cfg)
+    append_result(record, Path(cfg["paths"]["results"]) / "metrics.json")
 
 
 if __name__ == "__main__":
