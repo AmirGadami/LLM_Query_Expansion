@@ -1,5 +1,4 @@
 
-
 import argparse
 import json
 from pathlib import Path
@@ -17,7 +16,7 @@ IGNORE = -100
 
 
 class PassageDataset(Dataset):
-
+    """(query, passage) -> tokens, with the prompt masked out of the loss."""
 
     def __init__(self, records, tok, max_target):
         self.records, self.tok, self.max_target = records, tok, max_target
@@ -34,12 +33,18 @@ class PassageDataset(Dataset):
         target = self.tok(r["passage"], add_special_tokens=False)["input_ids"]
         target = target[:self.max_target] + [self.tok.eos_token_id]
 
+
         return {"input_ids": prompt + target,
                 "labels": [IGNORE] * len(prompt) + target}
 
 
 def collate(batch, pad_id):
+    """Pad to the longest sequence in the batch.
 
+    Right padding here, unlike generation: every position is scored in
+    parallel and padded ones are masked out of both attention and loss,
+    so where the padding sits does not matter.
+    """
     width = max(len(b["input_ids"]) for b in batch)
     pad = lambda seq, value: seq + [value] * (width - len(seq))
 
@@ -68,6 +73,9 @@ def main():
     proc = Path(cfg["paths"]["processed"])
     train = read_jsonl(proc / "sft.jsonl", args.limit)
     dev = read_jsonl(proc / "dev.jsonl", 200)
+
+
+    train.sort(key=lambda r: len(r["passage"]))
     print(f"train {len(train):,} | dev {len(dev):,}")
 
     tok = AutoTokenizer.from_pretrained(cfg["model"]["name"])
@@ -75,7 +83,8 @@ def main():
         tok.pad_token = tok.eos_token
 
     model = AutoModelForCausalLM.from_pretrained(
-        cfg["model"]["name"], torch_dtype=getattr(torch, cfg["model"]["train_dtype"]))
+        cfg["model"]["name"], dtype=getattr(torch, cfg["model"]["train_dtype"]))
+
 
     model.config.use_cache = False
 
@@ -89,6 +98,11 @@ def main():
     ))
     model.print_trainable_parameters()
 
+
+    steps = max(1, len(train) // (t["batch_size"] * t["grad_accum"])) * t["epochs"]
+    warmup = max(1, int(t["warmup_frac"] * steps))
+    print(f"{steps} optimizer steps, {warmup} warmup")
+
     trainer = Trainer(
         model=model,
         args=TrainingArguments(
@@ -98,7 +112,7 @@ def main():
             gradient_accumulation_steps=t["grad_accum"],
             learning_rate=t["lr"],
             num_train_epochs=t["epochs"],
-            warmup_ratio=t["warmup_ratio"],
+            warmup_steps=warmup,
             logging_steps=t["logging_steps"],
             eval_strategy="steps",
             eval_steps=t["eval_steps"],
@@ -113,8 +127,9 @@ def main():
     result = trainer.train()
 
     rate = result.metrics["train_samples_per_second"]
-    print(f"\n{rate:.2f} samples/sec"
-          f"  ->  30,000 examples would take {30000 / rate / 3600:.1f} hours")
+    print(f"\n{rate:.2f} samples/sec  ->  {cfg['data']['sft_size']:,} examples "
+          f"= {cfg['data']['sft_size'] / rate / 3600:.1f} hours")
+
 
     log = Path(cfg["paths"]["results"]) / "sft_log.json"
     log.parent.mkdir(parents=True, exist_ok=True)
