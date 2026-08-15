@@ -10,32 +10,54 @@ paths:
 
 data:
 
-  sft_size: 30000
-  dpo_size: 20000
-  dev_size: 500
+  sft_size: 8000
+  dpo_size: 1000
+  dev_size: 200
+
 
 model:
   name: Qwen/Qwen2.5-1.5B-Instruct
   device: mps
-  dtype: float16
+  dtype: float16          
+
+  train_dtype: bfloat16
 
 generation:
-  max_new_tokens: 128     
+  max_new_tokens: 128    
   batch_size: 16
 
-
+  
   eval:
     do_sample: false
 
-
+  
   sample:
     do_sample: true
     temperature: 0.9
     top_p: 0.95
     num_candidates: 4
 
+sft:
+  output_dir: models/sft
+  max_target_tokens: 128  
+                          
+  lora:
+    r: 16
+    alpha: 32
+    dropout: 0.05
+  train:
+    batch_size: 4
+    grad_accum: 4         
+    lr: 2.0e-4            
+                          
+
+    epochs: 1
+    warmup_ratio: 0.03
+    logging_steps: 20
+    eval_steps: 20
+
 query2doc:
-  repeat: 5
+  repeat: 5               
 
 retrieval:
   index: msmarco-v1-passage
