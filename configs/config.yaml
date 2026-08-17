@@ -81,7 +81,7 @@ dpo:
   output_dir: models/dpo
 
   
-  beta: 0.1
+  beta: 0.05
 
   
   max_length: 160
@@ -95,7 +95,7 @@ dpo:
     batch_size: 2         
                           
     grad_accum: 8         
-    lr: 5.0e-6            
+    lr: 2.0e-5             
                           
     epochs: 1
     logging_steps: 10
